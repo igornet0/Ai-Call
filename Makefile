@@ -125,66 +125,66 @@ host-deploy-static:
 # Install host nginx site config and enable it
 host-nginx-install:
 	@echo "Installing nginx site for $(DOMAIN)"
-	sudo tee /etc/nginx/sites-available/ai-call >/dev/null <<'NGINX'
-server {
-    listen 80;
-    server_name DOMAIN_PLACEHOLDER;
+	sudo tee /etc/nginx/sites-available/ai-call >/dev/null <<-'NGINX'
+	server {
+	    listen 80;
+	    server_name DOMAIN_PLACEHOLDER;
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
+	    location /.well-known/acme-challenge/ {
+	        root /var/www/certbot;
+	    }
 
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+	    location / {
+	        return 301 https://$host$request_uri;
+	    }
+	}
 
-server {
-    listen 443 ssl http2;
-    server_name DOMAIN_PLACEHOLDER;
+	server {
+	    listen 443 ssl http2;
+	    server_name DOMAIN_PLACEHOLDER;
 
-    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
+	    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
+	    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
+	    ssl_protocols TLSv1.2 TLSv1.3;
 
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+	    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
-    root /var/www/ai-call/public;
-    index index.html;
+	    root /var/www/ai-call/public;
+	    index index.html;
 
-    # Cache static assets
-    location ~* \.(?:js|css|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
-        access_log off;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        try_files $uri $uri/ /index.html;
-    }
+	    # Cache static assets
+	    location ~* \.(?:js|css|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
+	        access_log off;
+	        add_header Cache-Control "public, max-age=31536000, immutable";
+	        try_files $uri $uri/ /index.html;
+	    }
 
-    # SPA fallback
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
+	    # SPA fallback
+	    location / {
+	        try_files $uri $uri/ /index.html;
+	    }
 
-    # WebSocket signaling
-    location /ws {
-        proxy_pass http://127.0.0.1:3000/ws;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 3600s;
-    }
+	    # WebSocket signaling
+	    location /ws {
+	        proxy_pass http://127.0.0.1:3000/ws;
+	        proxy_http_version 1.1;
+	        proxy_set_header Upgrade $http_upgrade;
+	        proxy_set_header Connection "upgrade";
+	        proxy_set_header Host $host;
+	        proxy_read_timeout 3600s;
+	    }
 
-    # Health
-    location /health {
-        proxy_pass http://127.0.0.1:3000/health;
-    }
+	    # Health
+	    location /health {
+	        proxy_pass http://127.0.0.1:3000/health;
+	    }
 
-    # ACME over HTTPS (optional)
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-}
-NGINX
+	    # ACME over HTTPS (optional)
+	    location /.well-known/acme-challenge/ {
+	        root /var/www/certbot;
+	    }
+	}
+	NGINX
 	sudo sed -i "s/DOMAIN_PLACEHOLDER/$(DOMAIN)/g" /etc/nginx/sites-available/ai-call
 	sudo ln -sf /etc/nginx/sites-available/ai-call /etc/nginx/sites-enabled/ai-call
 	$(MAKE) host-nginx-reload
@@ -211,16 +211,16 @@ host-pm2-down:
 host-turn-setup:
 	@[ -n "$(PUBLIC_IP)" ] || (echo "ERROR: Set PUBLIC_IP=your_public_ip: make host-turn-setup PUBLIC_IP=1.2.3.4" && exit 1)
 	sudo apt-get update && sudo apt-get install -y coturn || true
-	sudo tee /etc/turnserver.conf >/dev/null <<TURN
-listening-port=3478
-fingerprint
-lt-cred-mech
-realm=$(DOMAIN)
-user=$(TURN_USER):$(TURN_PASS)
-external-ip=$(PUBLIC_IP)
-no-loopback-peers
-no-multicast-peers
-TURN
+	sudo tee /etc/turnserver.conf >/dev/null <<-'TURN'
+	listening-port=3478
+	fingerprint
+	lt-cred-mech
+	realm=$(DOMAIN)
+	user=$(TURN_USER):$(TURN_PASS)
+	external-ip=$(PUBLIC_IP)
+	no-loopback-peers
+	no-multicast-peers
+	TURN
 	@sudo bash -lc 'if [ -f /etc/default/coturn ]; then sed -i "s/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/" /etc/default/coturn || true; else echo "TURNSERVER_ENABLED=1" | tee /etc/default/coturn; fi'
 	sudo systemctl enable coturn
 	sudo systemctl restart coturn
