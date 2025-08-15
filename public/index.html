@@ -129,7 +129,10 @@
 
       function createPc() {
         pc = new RTCPeerConnection({
-          iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+          iceServers: [
+            { urls: ['stun:stun.l.google.com:19302'] },
+            { urls: ['turn:ai-call.24ai-spbconsult.ru:3478'], username: 'aiuser', credential: 'supersecretpassword' }
+          ]
         });
         pc.onicecandidate = (e) => {
           if (e.candidate && peers[0]) {

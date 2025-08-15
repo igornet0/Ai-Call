@@ -16,9 +16,36 @@ dev-up:
 
 dev-down:
 	docker compose -f docker-compose.dev.yml down
-
 dev-logs:
 	docker compose -f docker-compose.dev.yml logs -f
+
+# ------- Local project targets -------
+.PHONY: install build start
+
+install:
+	npm ci
+
+build:
+	npm run build
+
+start:
+	node dist/index.js
+
+# ------- Dev per-module targets -------
+.PHONY: dev-up-% dev-down-% dev-logs-% dev-build-%
+
+dev-up-%:
+	docker compose -f docker-compose.dev.yml up -d $*
+
+dev-down-%:
+	-docker compose -f docker-compose.dev.yml stop $*
+	-docker compose -f docker-compose.dev.yml rm -f $*
+
+dev-logs-%:
+	docker compose -f docker-compose.dev.yml logs -f $*
+
+dev-build-%:
+	docker compose -f docker-compose.dev.yml build $*
 
 # ------- Prod targets -------
 .PHONY: prod-build prod-up prod-down prod-logs
@@ -34,6 +61,22 @@ prod-down:
 
 prod-logs:
 	docker compose -f docker-compose.prod.yml logs -f
+
+# ------- Prod per-module targets -------
+.PHONY: prod-up-% prod-down-% prod-logs-% prod-build-%
+
+prod-up-%:
+	docker compose -f docker-compose.prod.yml up -d $*
+
+prod-down-%:
+	-docker compose -f docker-compose.prod.yml stop $*
+	-docker compose -f docker-compose.prod.yml rm -f $*
+
+prod-logs-%:
+	docker compose -f docker-compose.prod.yml logs -f $*
+
+prod-build-%:
+	docker compose -f docker-compose.prod.yml build $*
 
 # ------- TLS with certbot (HTTP-01 webroot) -------
 .PHONY: cert-issue cert-renew cert-dryrun
