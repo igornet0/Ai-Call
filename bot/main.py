@@ -57,9 +57,8 @@ async def lifespan(dp: Dispatcher, db: Database):
 
 async def send_call_notifications(bot: Bot, initiator_id: int, target_id: int, url: str, room_id: str) -> None:
     notify = "Начат звонок. Ссылка на комнату:\n" + url
-    kb_both = call_invite_kb(room_id, initiator_id, target_id)
     try:
-        await bot.send_message(target_id, notify, reply_markup=kb_both)
+        await bot.send_message(target_id, notify, reply_markup=call_invite_kb(room_id, initiator_id, target_id, url))
     except Exception:
         pass
     try:
@@ -222,34 +221,17 @@ async def main() -> None:
         except Exception:
             return
         room_id = secrets.token_urlsafe(9)
-        await db.create_room(room_id, chosen.from_user.id)
         url = f"{cfg.app_public_base_url}/call.html?room={room_id}"
+        await db.create_room(room_id, chosen.from_user.id)
         notify = "Начат звонок. Ссылка на комнату:\n" + url
         try:
-            await bot.send_message(target_id, notify, reply_markup=call_invite_kb(room_id, chosen.from_user.id, target_id))
+            await bot.send_message(target_id, notify, reply_markup=call_invite_kb(room_id, chosen.from_user.id, target_id, url))
         except Exception:
             pass
         try:
             await bot.send_message(chosen.from_user.id, notify, reply_markup=call_invite_menu_only_kb(room_id, chosen.from_user.id, target_id))
         except Exception:
             pass
-
-    @dp.callback_query(F.data.startswith("call_accept:"))
-    async def on_call_accept(cb: CallbackQuery) -> None:
-        try:
-            _, room_id, initiator_s, target_s = cb.data.split(":", 3)
-            initiator_id = int(initiator_s)
-            target_id = int(target_s)
-        except Exception:
-            await cb.answer("Ошибка", show_alert=True)
-            return
-        new_text = "✅ " + (cb.message.text or "")
-        await cb.message.edit_text(new_text, reply_markup=call_invite_menu_only_kb(room_id, initiator_id, target_id))
-        try:
-            await bot.send_message(initiator_id, "Пользователь принял звонок ✅")
-        except Exception:
-            pass
-        await cb.answer()
 
     @dp.callback_query(F.data.startswith("call_decline:"))
     async def on_call_decline(cb: CallbackQuery) -> None:
