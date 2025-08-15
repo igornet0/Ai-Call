@@ -234,3 +234,18 @@ host-all:
 	$(MAKE) host-nginx-install
 	$(MAKE) host-cert-issue
 	$(MAKE) host-pm2-up
+
+# ------- Bot (local venv) -------
+.PHONY: bot-venv bot-install bot-run bot-setup
+
+bot-venv:
+	python3 -m venv bot/.venv
+	bot/.venv/bin/pip install --upgrade pip
+
+bot-install: bot-venv
+	bot/.venv/bin/pip install -r bot/requirements.txt
+
+# Runs bot locally using .env from project root and venv in bot/.venv
+bot-run: bot-install
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	cd bot && . .venv/bin/activate && python -m main

@@ -28,3 +28,19 @@ def contacts_list_kb(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
             for tg_id, name in items]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="start_call")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def call_invite_kb(room_id: str, initiator_id: int, target_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"call_accept:{room_id}:{initiator_id}:{target_id}"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data=f"call_decline:{room_id}:{initiator_id}:{target_id}")
+        ],
+        [InlineKeyboardButton(text="📋 Меню (Отмена)", callback_data=f"call_menu_cancel:{room_id}:{initiator_id}:{target_id}")]
+    ])
+
+
+def call_invite_menu_only_kb(room_id: str, initiator_id: int, target_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Меню (Отмена)", callback_data=f"call_menu_cancel:{room_id}:{initiator_id}:{target_id}")]
+    ])

@@ -16,7 +16,7 @@ from aiogram.utils.markdown import hbold
 from dotenv import load_dotenv
 
 from db import Database
-from keyboards import main_menu_kb, call_menu_kb, contacts_list_kb, search_contacts_kb
+from keyboards import main_menu_kb, call_menu_kb, contacts_list_kb, search_contacts_kb, call_invite_kb, call_invite_menu_only_kb
 
 
 class RegStates(StatesGroup):
@@ -55,6 +55,19 @@ async def lifespan(dp: Dispatcher, db: Database):
         await db.close()
 
 
+async def send_call_notifications(bot: Bot, initiator_id: int, target_id: int, url: str, room_id: str) -> None:
+    notify = "Начат звонок. Ссылка на комнату:\n" + url
+    kb_both = call_invite_kb(room_id, initiator_id, target_id)
+    try:
+        await bot.send_message(target_id, notify, reply_markup=kb_both)
+    except Exception:
+        pass
+    try:
+        await bot.send_message(initiator_id, notify, reply_markup=call_invite_menu_only_kb(room_id, initiator_id, target_id))
+    except Exception:
+        pass
+
+
 async def main() -> None:
     uvloop.install()
     cfg = get_config()
@@ -73,7 +86,6 @@ async def main() -> None:
                 invite_owner_id = None
 
         user = await db.get_user(message.from_user.id)
-        # Self-invite guard: if user clicks their own link, do nothing meaningful
         if invite_owner_id and invite_owner_id == message.from_user.id:
             await message.answer("Это ваша ссылка приглашения. Отправьте её другому пользователю.", reply_markup=main_menu_kb())
             return
@@ -150,25 +162,15 @@ async def main() -> None:
         if not items:
             await message.answer("Ничего не найдено. Попробуйте другое имя.")
             return
-        # One match: start call immediately
         if len(items) == 1:
             rec = items[0]
             target_id = int(rec["telegram_id"])  # contact id
             room_id = secrets.token_urlsafe(9)
             await db.create_room(room_id, message.from_user.id)
             url = f"{cfg.app_public_base_url}/call.html?room={room_id}"
-            notify = "Начат звонок. Ссылка на комнату:\n" + url
-            try:
-                await bot.send_message(target_id, notify)
-            except Exception:
-                pass
-            try:
-                await bot.send_message(message.from_user.id, notify)
-            except Exception:
-                pass
+            await send_call_notifications(bot, message.from_user.id, target_id, url, room_id)
             await state.clear()
             return
-        # Multiple: show options
         buttons = [(int(r["telegram_id"]), str(r["username"])) for r in items]
         await message.answer("Результаты поиска:", reply_markup=contacts_list_kb(buttons))
         await state.clear()
@@ -183,15 +185,7 @@ async def main() -> None:
         room_id = secrets.token_urlsafe(9)
         await db.create_room(room_id, cb.from_user.id)
         url = f"{cfg.app_public_base_url}/call.html?room={room_id}"
-        notify = "Начат звонок. Ссылка на комнату:\n" + url
-        try:
-            await bot.send_message(target_id, notify)
-        except Exception:
-            pass
-        try:
-            await bot.send_message(cb.from_user.id, notify)
-        except Exception:
-            pass
+        await send_call_notifications(bot, cb.from_user.id, target_id, url, room_id)
         await cb.answer("Ссылка отправлена")
 
     @dp.inline_query()
@@ -231,21 +225,63 @@ async def main() -> None:
         await db.create_room(room_id, chosen.from_user.id)
         url = f"{cfg.app_public_base_url}/call.html?room={room_id}"
         notify = "Начат звонок. Ссылка на комнату:\n" + url
-        # Try DM both; if DM to initiator fails (hasn't started bot), update inline message instead
         try:
-            await bot.send_message(target_id, notify)
+            await bot.send_message(target_id, notify, reply_markup=call_invite_kb(room_id, chosen.from_user.id, target_id))
         except Exception:
             pass
-        dm_sent = True
         try:
-            await bot.send_message(chosen.from_user.id, notify)
+            await bot.send_message(chosen.from_user.id, notify, reply_markup=call_invite_menu_only_kb(room_id, chosen.from_user.id, target_id))
         except Exception:
-            dm_sent = False
-        if not dm_sent and chosen.inline_message_id:
-            try:
-                await bot.edit_message_text(text=notify, inline_message_id=chosen.inline_message_id)
-            except Exception:
-                pass
+            pass
+
+    @dp.callback_query(F.data.startswith("call_accept:"))
+    async def on_call_accept(cb: CallbackQuery) -> None:
+        try:
+            _, room_id, initiator_s, target_s = cb.data.split(":", 3)
+            initiator_id = int(initiator_s)
+            target_id = int(target_s)
+        except Exception:
+            await cb.answer("Ошибка", show_alert=True)
+            return
+        new_text = "✅ " + (cb.message.text or "")
+        await cb.message.edit_text(new_text, reply_markup=call_invite_menu_only_kb(room_id, initiator_id, target_id))
+        try:
+            await bot.send_message(initiator_id, "Пользователь принял звонок ✅")
+        except Exception:
+            pass
+        await cb.answer()
+
+    @dp.callback_query(F.data.startswith("call_decline:"))
+    async def on_call_decline(cb: CallbackQuery) -> None:
+        try:
+            _, room_id, initiator_s, target_s = cb.data.split(":", 3)
+            initiator_id = int(initiator_s)
+            target_id = int(target_s)
+        except Exception:
+            await cb.answer("Ошибка", show_alert=True)
+            return
+        await cb.message.edit_text("Звонок отклонён.")
+        try:
+            await bot.send_message(initiator_id, "Пользователь отклонил звонок ❌")
+        except Exception:
+            pass
+        await cb.answer()
+
+    @dp.callback_query(F.data.startswith("call_menu_cancel:"))
+    async def on_call_menu_cancel(cb: CallbackQuery) -> None:
+        try:
+            _, room_id, initiator_s, target_s = cb.data.split(":", 3)
+            initiator_id = int(initiator_s)
+            target_id = int(target_s)
+        except Exception:
+            await cb.answer("Ошибка", show_alert=True)
+            return
+        await cb.message.edit_text("Главное меню", reply_markup=main_menu_kb())
+        try:
+            await bot.send_message(initiator_id, "Пользователь отменил звонок")
+        except Exception:
+            pass
+        await cb.answer()
 
     async with lifespan(dp, db):
         await dp.start_polling(bot)
