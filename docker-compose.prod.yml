@@ -19,7 +19,23 @@ services:
       - app
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./public:/usr/share/nginx/html:ro
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
     restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    container_name: ai-call-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["echo 'Use: docker compose -f docker-compose.prod.yml run --rm certbot certonly --webroot -w /var/www/certbot -d ai-call.24ai-spbconsult.ru --email admin@24ai-spbconsult.ru --agree-tos --non-interactive'"]
+
+volumes:
+  certbot-etc:
+  certbot-www:
