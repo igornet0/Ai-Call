@@ -20,6 +20,7 @@ dev-up:
 
 dev-down:
 	docker compose -f docker-compose.dev.yml down
+	
 dev-logs:
 	docker compose -f docker-compose.dev.yml logs -f
 
@@ -211,16 +212,16 @@ host-pm2-down:
 host-turn-setup:
 	@[ -n "$(PUBLIC_IP)" ] || (echo "ERROR: Set PUBLIC_IP=your_public_ip: make host-turn-setup PUBLIC_IP=1.2.3.4" && exit 1)
 	sudo apt-get update && sudo apt-get install -y coturn || true
-	sudo tee /etc/turnserver.conf >/dev/null <<-'TURN'
-	listening-port=3478
-	fingerprint
-	lt-cred-mech
-	realm=$(DOMAIN)
-	user=$(TURN_USER):$(TURN_PASS)
-	external-ip=$(PUBLIC_IP)
-	no-loopback-peers
-	no-multicast-peers
-	TURN
+	@sudo bash -lc 'printf "%s\n" \
+	"listening-port=3478" \
+	"fingerprint" \
+	"lt-cred-mech" \
+	"realm=$(DOMAIN)" \
+	"user=$(TURN_USER):$(TURN_PASS)" \
+	"external-ip=$(PUBLIC_IP)" \
+	"no-loopback-peers" \
+	"no-multicast-peers" \
+	> /etc/turnserver.conf'
 	@sudo bash -lc 'if [ -f /etc/default/coturn ]; then sed -i "s/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/" /etc/default/coturn || true; else echo "TURNSERVER_ENABLED=1" | tee /etc/default/coturn; fi'
 	sudo systemctl enable coturn
 	sudo systemctl restart coturn
