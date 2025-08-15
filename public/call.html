@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI‑Call — Test Call</title>
+    <link rel="stylesheet" href="/global.css" />
+    <style>
+      .wrap{ max-width:880px; margin:0 auto; padding:32px 24px; color:var(--text); }
+      .card{ background:var(--card-bg); backdrop-filter: blur(8px); border-radius:18px; padding:20px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 10px 30px rgba(0,0,0,.18); }
+      .cta{ display:inline-block; margin-top:12px; background:var(--btn); color:#1b0033; font-weight:800; border:none; padding:10px 16px; border-radius:12px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Test a 1:1 Audio Call</h1>
+      <div class="card">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <label>Room ID <input id="room" value="test-room" style="padding:10px 12px; border-radius:10px; border:none; outline:none;"/></label>
+          <button id="join" class="cta">Join</button>
+          <button id="leave" class="cta" style="background:#fff; color:#12002b; box-shadow:none; opacity:.9;" disabled>Leave</button>
+        </div>
+        <pre id="log" style="margin-top:12px; background:rgba(0,0,0,.25);"></pre>
+      </div>
+    </div>
+
+    <script>
+      const logEl = document.getElementById('log');
+      const roomEl = document.getElementById('room');
+      const joinBtn = document.getElementById('join');
+      const leaveBtn = document.getElementById('leave');
+
+      let ws; let clientId; let roomId; let pc; let localStream; let peers = [];
+      function log(...args) { const line = args.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' '); logEl.textContent += line + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+      async function initMedia() { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+      function createPc() {
+        pc = new RTCPeerConnection({ iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] });
+        pc.onicecandidate = (e) => { if (e.candidate && peers[0]) { ws.send(JSON.stringify({ type: 'signal', roomId, targetId: peers[0], payload: { candidate: e.candidate } })); } };
+        pc.ontrack = (e) => { let el = document.getElementById('remote'); if (!el) { el = document.createElement('audio'); el.id = 'remote'; el.autoplay = true; el.controls = true; document.body.appendChild(el);} el.srcObject = e.streams[0]; };
+        for (const track of localStream.getAudioTracks()) { pc.addTrack(track, localStream); }
+      }
+      async function call() { if (!peers[0]) return; createPc(); const offer = await pc.createOffer({ offerToReceiveAudio: true }); await pc.setLocalDescription(offer); ws.send(JSON.stringify({ type: 'signal', roomId, targetId: peers[0], payload: { sdp: pc.localDescription } })); }
+      async function handleSignal(fromId, payload) { if (payload.sdp) { if (!pc) createPc(); const desc = payload.sdp; if (desc.type === 'offer') { await pc.setRemoteDescription(desc); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({ type: 'signal', roomId, targetId: fromId, payload: { sdp: pc.localDescription } })); } else if (desc.type === 'answer') { await pc.setRemoteDescription(desc); } } else if (payload.candidate) { if (!pc) return; try { await pc.addIceCandidate(payload.candidate); } catch (e) { log('ICE add error', e); } } }
+      joinBtn.onclick = async () => { roomId = roomEl.value.trim(); if (!roomId) return; await initMedia(); ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); ws.onmessage = async (e) => { const msg = JSON.parse(e.data); if (msg.type === 'welcome') { clientId = msg.clientId; log('id', clientId); } if (msg.type === 'peers') { peers = msg.peers; log('peers', peers); if (peers.length > 0 && !pc) { await call(); } } if (msg.type === 'signal') { await handleSignal(msg.fromId, msg.payload); } if (msg.type === 'error') { log('error', msg.message); } }; ws.onopen = () => ws.send(JSON.stringify({ type: 'join', roomId })); ws.onclose = () => { log('socket closed'); }; joinBtn.disabled = true; leaveBtn.disabled = false; roomEl.disabled = true; };
+      leaveBtn.onclick = () => { try { ws && ws.send(JSON.stringify({ type: 'leave', roomId })); } catch {} try { ws && ws.close(); } catch {} try { pc && pc.close(); } catch {} pc = null; peers = []; clientId = null; roomId = null; joinBtn.disabled = false; leaveBtn.disabled = true; roomEl.disabled = false; };
+    </script>
+  </body>
+</html>
