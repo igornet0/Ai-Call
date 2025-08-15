@@ -8,6 +8,7 @@ TURN_USER := aiuser
 TURN_PASS := supersecretpassword
 # Set this when running host-turn-setup: make host-turn-setup PUBLIC_IP=1.2.3.4
 PUBLIC_IP :=
+CURDIR := $(shell pwd)
 
 # ------- Dev targets -------
 .PHONY: dev-build dev-up dev-down dev-logs
@@ -234,6 +235,49 @@ host-all:
 	$(MAKE) host-nginx-install
 	$(MAKE) host-cert-issue
 	$(MAKE) host-pm2-up
+
+# ------- Host bot service (systemd) -------
+.PHONY: host-bot-setup host-bot-up host-bot-down host-bot-restart host-bot-logs
+
+# Install Python and set up venv for the bot on the host
+host-bot-setup:
+	sudo apt-get update || true
+	sudo apt-get install -y python3 python3-venv || true
+	[ -d bot/.venv ] || python3 -m venv bot/.venv
+	bot/.venv/bin/pip install --upgrade pip
+	bot/.venv/bin/pip install -r bot/requirements.txt
+
+# Create and start a systemd service to run the bot persistently
+host-bot-up: host-bot-setup
+	@echo "Installing systemd service ai-call-bot"
+	sudo tee /etc/systemd/system/ai-call-bot.service >/dev/null <<-'UNIT'
+	[Unit]
+	Description=AI Call Bot Service
+	After=network.target
+
+	[Service]
+	Type=simple
+	WorkingDirectory=CWD_PLACEHOLDER/bot
+	EnvironmentFile=-CWD_PLACEHOLDER/.env
+	ExecStart=CWD_PLACEHOLDER/bot/.venv/bin/python -m main
+	Restart=always
+	RestartSec=3
+
+	[Install]
+	WantedBy=multi-user.target
+	UNIT
+	sudo sed -i "s#CWD_PLACEHOLDER#$(CURDIR)#g" /etc/systemd/system/ai-call-bot.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now ai-call-bot
+
+host-bot-down:
+	- sudo systemctl disable --now ai-call-bot || true
+
+host-bot-restart:
+	sudo systemctl restart ai-call-bot
+
+host-bot-logs:
+	sudo journalctl -u ai-call-bot -n 200 -f | cat
 
 # ------- Bot (local venv) -------
 .PHONY: bot-venv bot-install bot-run bot-setup
