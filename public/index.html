@@ -139,14 +139,24 @@
             ws.send(JSON.stringify({ type: 'signal', roomId, targetId: peers[0], payload: { candidate: e.candidate } }));
           }
         };
+        pc.onicecandidateerror = (e) => {
+          try { log('iceCandidateError', e.errorText || e.errorCode || 'unknown'); } catch {}
+        };
+        pc.oniceconnectionstatechange = () => log('iceState', pc.iceConnectionState);
+        pc.onconnectionstatechange = () => log('pcState', pc.connectionState);
         pc.ontrack = (e) => {
+          log('ontrack');
           let el = document.getElementById('remote');
           if (!el) {
             el = document.createElement('audio');
-            el.id = 'remote'; el.autoplay = true; el.controls = true;
+            el.id = 'remote'; el.autoplay = true; el.controls = true; el.setAttribute('playsinline', 'true');
+            el.muted = false; el.volume = 1;
             document.body.appendChild(el);
           }
           el.srcObject = e.streams[0];
+          if (typeof el.play === 'function') {
+            el.play().catch(err => log('autoplay', String(err)));
+          }
         };
         for (const track of localStream.getAudioTracks()) {
           pc.addTrack(track, localStream);
@@ -155,6 +165,7 @@
 
       async function call() {
         if (!peers[0]) return;
+        log('creating offer');
         createPc();
         const offer = await pc.createOffer({ offerToReceiveAudio: true });
         await pc.setLocalDescription(offer);
@@ -223,7 +234,8 @@
         try { ws && ws.send(JSON.stringify({ type: 'leave', roomId })); } catch {}
         try { ws && ws.close(); } catch {}
         try { pc && pc.close(); } catch {}
-        pc = null; peers = []; clientId = null; roomId = null;
+        try { localStream && localStream.getTracks().forEach(t => t.stop()); } catch {}
+        pc = null; localStream = null; peers = []; clientId = null; roomId = null;
         joinBtn.disabled = false; leaveBtn.disabled = true; roomEl.disabled = false;
       };
     </script>
