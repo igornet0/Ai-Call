@@ -162,20 +162,33 @@
       }
 
       async function handleSignal(fromId, payload) {
-        if (payload.sdp) {
-          if (!pc) createPc();
-          const desc = payload.sdp;
-          if (desc.type === 'offer') {
-            await pc.setRemoteDescription(desc);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ type: 'signal', roomId, targetId: fromId, payload: { sdp: pc.localDescription } }));
-          } else if (desc.type === 'answer') {
-            await pc.setRemoteDescription(desc);
+        try {
+          if (payload.sdp) {
+            if (!pc) createPc();
+            const desc = payload.sdp;
+            if (desc.type === 'offer') {
+              // If we somehow have a local offer, rollback to handle glare safely
+              if (pc.signalingState !== 'stable') {
+                try { await pc.setLocalDescription({ type: 'rollback' }); } catch {}
+              }
+              await pc.setRemoteDescription(desc);
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              ws.send(JSON.stringify({ type: 'signal', roomId, targetId: fromId, payload: { sdp: pc.localDescription } }));
+            } else if (desc.type === 'answer') {
+              // Apply remote answer only when we have a local offer
+              if (pc.signalingState !== 'have-local-offer') {
+                log('Ignore unexpected answer in state', pc.signalingState);
+                return;
+              }
+              await pc.setRemoteDescription(desc);
+            }
+          } else if (payload.candidate) {
+            if (!pc) return;
+            try { await pc.addIceCandidate(payload.candidate); } catch (e) { log('ICE add error', e); }
           }
-        } else if (payload.candidate) {
-          if (!pc) return;
-          try { await pc.addIceCandidate(payload.candidate); } catch (e) { log('ICE add error', e); }
+        } catch (e) {
+          log('signal handling error', e);
         }
       }
 
@@ -190,7 +203,9 @@
           if (msg.type === 'peers') {
             peers = msg.peers;
             log('peers', peers);
-            if (peers.length > 0 && !pc) {
+            // Initiate call deterministically to avoid offer glare: only the client with the
+            // lexicographically larger clientId starts the offer.
+            if (peers.length > 0 && !pc && clientId && clientId > peers[0]) {
               await call();
             }
           }

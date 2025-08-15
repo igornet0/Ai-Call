@@ -34,14 +34,46 @@
       function log(...args) { const line = args.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' '); logEl.textContent += line + '\n'; logEl.scrollTop = logEl.scrollHeight; }
       async function initMedia() { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
       function createPc() {
-        pc = new RTCPeerConnection({ iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] });
+        pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: ['stun:stun.l.google.com:19302'] },
+            { urls: ['turn:ai-call.24ai-spbconsult.ru:3478'], username: 'aiuser', credential: 'supersecretpassword' }
+          ]
+        });
         pc.onicecandidate = (e) => { if (e.candidate && peers[0]) { ws.send(JSON.stringify({ type: 'signal', roomId, targetId: peers[0], payload: { candidate: e.candidate } })); } };
         pc.ontrack = (e) => { let el = document.getElementById('remote'); if (!el) { el = document.createElement('audio'); el.id = 'remote'; el.autoplay = true; el.controls = true; document.body.appendChild(el);} el.srcObject = e.streams[0]; };
         for (const track of localStream.getAudioTracks()) { pc.addTrack(track, localStream); }
       }
       async function call() { if (!peers[0]) return; createPc(); const offer = await pc.createOffer({ offerToReceiveAudio: true }); await pc.setLocalDescription(offer); ws.send(JSON.stringify({ type: 'signal', roomId, targetId: peers[0], payload: { sdp: pc.localDescription } })); }
-      async function handleSignal(fromId, payload) { if (payload.sdp) { if (!pc) createPc(); const desc = payload.sdp; if (desc.type === 'offer') { await pc.setRemoteDescription(desc); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({ type: 'signal', roomId, targetId: fromId, payload: { sdp: pc.localDescription } })); } else if (desc.type === 'answer') { await pc.setRemoteDescription(desc); } } else if (payload.candidate) { if (!pc) return; try { await pc.addIceCandidate(payload.candidate); } catch (e) { log('ICE add error', e); } } }
-      joinBtn.onclick = async () => { roomId = roomEl.value.trim(); if (!roomId) return; await initMedia(); ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); ws.onmessage = async (e) => { const msg = JSON.parse(e.data); if (msg.type === 'welcome') { clientId = msg.clientId; log('id', clientId); } if (msg.type === 'peers') { peers = msg.peers; log('peers', peers); if (peers.length > 0 && !pc) { await call(); } } if (msg.type === 'signal') { await handleSignal(msg.fromId, msg.payload); } if (msg.type === 'error') { log('error', msg.message); } }; ws.onopen = () => ws.send(JSON.stringify({ type: 'join', roomId })); ws.onclose = () => { log('socket closed'); }; joinBtn.disabled = true; leaveBtn.disabled = false; roomEl.disabled = true; };
+      async function handleSignal(fromId, payload) {
+        try {
+          if (payload.sdp) {
+            if (!pc) createPc();
+            const desc = payload.sdp;
+            if (desc.type === 'offer') {
+              if (pc.signalingState !== 'stable') {
+                try { await pc.setLocalDescription({ type: 'rollback' }); } catch {}
+              }
+              await pc.setRemoteDescription(desc);
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              ws.send(JSON.stringify({ type: 'signal', roomId, targetId: fromId, payload: { sdp: pc.localDescription } }));
+            } else if (desc.type === 'answer') {
+              if (pc.signalingState !== 'have-local-offer') {
+                log('Ignore unexpected answer in state', pc.signalingState);
+                return;
+              }
+              await pc.setRemoteDescription(desc);
+            }
+          } else if (payload.candidate) {
+            if (!pc) return;
+            try { await pc.addIceCandidate(payload.candidate); } catch (e) { log('ICE add error', e); }
+          }
+        } catch (e) {
+          log('signal handling error', e);
+        }
+      }
+      joinBtn.onclick = async () => { roomId = roomEl.value.trim(); if (!roomId) return; await initMedia(); ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); ws.onmessage = async (e) => { const msg = JSON.parse(e.data); if (msg.type === 'welcome') { clientId = msg.clientId; log('id', clientId); } if (msg.type === 'peers') { peers = msg.peers; log('peers', peers); if (peers.length > 0 && !pc && clientId && clientId > peers[0]) { await call(); } } if (msg.type === 'signal') { await handleSignal(msg.fromId, msg.payload); } if (msg.type === 'error') { log('error', msg.message); } }; ws.onopen = () => ws.send(JSON.stringify({ type: 'join', roomId })); ws.onclose = () => { log('socket closed'); }; joinBtn.disabled = true; leaveBtn.disabled = false; roomEl.disabled = true; };
       leaveBtn.onclick = () => { try { ws && ws.send(JSON.stringify({ type: 'leave', roomId })); } catch {} try { ws && ws.close(); } catch {} try { pc && pc.close(); } catch {} pc = null; peers = []; clientId = null; roomId = null; joinBtn.disabled = false; leaveBtn.disabled = true; roomEl.disabled = false; };
     </script>
   </body>
