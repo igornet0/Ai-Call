@@ -30,6 +30,10 @@
       const joinBtn = document.getElementById('join');
       const leaveBtn = document.getElementById('leave');
 
+      const params = new URLSearchParams(location.search);
+      const prefillRoom = params.get('room');
+      if (prefillRoom) { roomEl.value = prefillRoom; }
+
       let ws; let clientId; let roomId; let pc; let localStream; let peers = [];
       function log(...args) { const line = args.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' '); logEl.textContent += line + '\n'; logEl.scrollTop = logEl.scrollHeight; }
       async function initMedia() { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }

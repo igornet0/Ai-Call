@@ -10,6 +10,32 @@ services:
       - PORT=3000
     expose:
       - "3000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: ai-call-postgres
+    environment:
+      - POSTGRES_USER=ai
+      - POSTGRES_PASSWORD=ai
+      - POSTGRES_DB=aicall
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: ai-call-bot
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://ai:ai@db:5432/aicall
     restart: unless-stopped
 
   nginx:
@@ -37,3 +63,4 @@ services:
 volumes:
   certbot-etc:
   certbot-www:
+  pgdata:

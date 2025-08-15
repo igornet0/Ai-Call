@@ -13,6 +13,34 @@ services:
     volumes:
       - ./:/app
       - /app/node_modules
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: ai-call-postgres-dev
+    environment:
+      - POSTGRES_USER=ai
+      - POSTGRES_PASSWORD=ai
+      - POSTGRES_DB=aicall
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: ai-call-bot-dev
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://ai:ai@db:5432/aicall
     restart: unless-stopped
 
   nginx:
@@ -26,3 +54,6 @@ services:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./public:/usr/share/nginx/html:ro
     restart: unless-stopped
+
+volumes:
+  pgdata_dev:
