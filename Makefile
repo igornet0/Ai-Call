@@ -250,22 +250,22 @@ host-bot-setup:
 # Create and start a systemd service to run the bot persistently
 host-bot-up: host-bot-setup
 	@echo "Installing systemd service ai-call-bot"
-	sudo tee /etc/systemd/system/ai-call-bot.service >/dev/null <<-'UNIT'
-	[Unit]
-	Description=AI Call Bot Service
-	After=network.target
-
-	[Service]
-	Type=simple
-	WorkingDirectory=CWD_PLACEHOLDER/bot
-	EnvironmentFile=-CWD_PLACEHOLDER/.env
-	ExecStart=CWD_PLACEHOLDER/bot/.venv/bin/python -m main
-	Restart=always
-	RestartSec=3
-
-	[Install]
-	WantedBy=multi-user.target
-	UNIT
+	printf '%s\n' \
+	"[Unit]" \
+	"Description=AI Call Bot Service" \
+	"After=network.target" \
+	"" \
+	"[Service]" \
+	"Type=simple" \
+	"WorkingDirectory=CWD_PLACEHOLDER/bot" \
+	"EnvironmentFile=-CWD_PLACEHOLDER/.env" \
+	"ExecStart=CWD_PLACEHOLDER/bot/.venv/bin/python -m main" \
+	"Restart=always" \
+	"RestartSec=3" \
+	"" \
+	"[Install]" \
+	"WantedBy=multi-user.target" \
+	| sudo tee /etc/systemd/system/ai-call-bot.service >/dev/null
 	sudo sed -i "s#CWD_PLACEHOLDER#$(CURDIR)#g" /etc/systemd/system/ai-call-bot.service
 	sudo systemctl daemon-reload
 	sudo systemctl enable --now ai-call-bot
