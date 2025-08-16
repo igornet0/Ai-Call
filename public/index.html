@@ -100,6 +100,7 @@
           <label>Room ID <input id="room" value="test-room" style="padding:10px 12px; border-radius:10px; border:none; outline:none;"/></label>
           <button id="join" class="cta" style="margin:0;">Join</button>
           <button id="leave" class="cta" style="margin:0; background:#fff; color:#12002b; box-shadow:none; opacity:.9;" disabled>Leave</button>
+          <button id="ai" class="cta" style="margin:0; background:#ffb3da;">AI Call (Rust)</button>
         </div>
         <pre id="log" style="margin-top:12px; background:rgba(0,0,0,.25);"></pre>
       </section>
@@ -114,6 +115,7 @@
       const roomEl = document.getElementById('room');
       const joinBtn = document.getElementById('join');
       const leaveBtn = document.getElementById('leave');
+      const aiBtn = document.getElementById('ai');
 
       let ws; let clientId; let roomId; let pc; let localStream; let peers = [];
 
@@ -237,6 +239,37 @@
         try { localStream && localStream.getTracks().forEach(t => t.stop()); } catch {}
         pc = null; localStream = null; peers = []; clientId = null; roomId = null;
         joinBtn.disabled = false; leaveBtn.disabled = true; roomEl.disabled = false;
+      };
+
+      aiBtn.onclick = async () => {
+        try {
+          await initMedia();
+          const pc2 = new RTCPeerConnection({
+            iceServers: [
+              { urls: ['stun:stun.l.google.com:19302'] },
+              { urls: ['turn:ai-call.24ai-spbconsult.ru:3478'], username: 'aiuser', credential: 'supersecretpassword' }
+            ]
+          });
+          for (const track of (localStream?.getAudioTracks?.() || [])) { pc2.addTrack(track, localStream); }
+          const gatherDone = new Promise((resolve) => {
+            if (pc2.iceGatheringState === 'complete') return resolve();
+            const check = () => { if (pc2.iceGatheringState === 'complete') { pc2.removeEventListener('icegatheringstatechange', check); resolve(); } };
+            pc2.addEventListener('icegatheringstatechange', check);
+            setTimeout(resolve, 1500);
+          });
+          const offer = await pc2.createOffer({ offerToReceiveAudio: true });
+          await pc2.setLocalDescription(offer);
+          await gatherDone;
+          const body = { sdp: pc2.localDescription?.sdp || '' };
+          log('AI offer bytes', (body.sdp || '').length);
+          const resp = await fetch('/api/ai/offer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          log('AI offer status', resp.status);
+          const text = await resp.text();
+          try { log('AI offer resp', JSON.parse(text)); } catch { log('AI offer raw', text); }
+          try { pc2.close(); } catch {}
+        } catch (e) {
+          log('AI call error', String(e));
+        }
       };
     </script>
   </body>
