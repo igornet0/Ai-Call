@@ -1,7 +1,8 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::{get, post}, Json, Router};
+use axum::{extract::State, http::{HeaderValue, Method, StatusCode}, response::IntoResponse, routing::{get, post}, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::info;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Clone)]
 struct AppState {}
@@ -22,10 +23,22 @@ async fn main() -> anyhow::Result<()> {
 
     let app_state = Arc::new(AppState {});
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+        ])
+        .allow_credentials(false)
+        .max_age(std::time::Duration::from_secs(60 * 60));
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/ai/offer", post(offer))
-        .with_state(app_state);
+        .route("/api/ai/ice", post(ice))
+        .with_state(app_state)
+        .layer(cors);
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7000);
@@ -54,6 +67,15 @@ async fn offer(State(_state): State<Arc<AppState>>, Json(req): Json<OfferRequest
     // Placeholder: echo minimal fake SDP to allow wiring tests. Replace with real SDP answer.
     let fake_answer_sdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n".to_string();
     (StatusCode::OK, Json(AnswerResponse { sdp: fake_answer_sdp }))
+}
+
+#[derive(Debug, Deserialize)]
+struct IceRequest {
+    candidate: serde_json::Value,
+}
+
+async fn ice(State(_state): State<Arc<AppState>>, Json(_req): Json<IceRequest>) -> impl IntoResponse {
+    (StatusCode::NO_CONTENT, ())
 }
 
 
