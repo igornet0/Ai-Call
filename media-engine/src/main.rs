@@ -1,7 +1,7 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::{get, post}, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Clone)]
 struct AppState {}
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
     info!(%addr, "media-engine listening");
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
-    Ok(0.into())
+    Ok(())
 }
 
 fn init_tracing() {
