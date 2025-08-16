@@ -2,7 +2,10 @@ use axum::{extract::State, http::{HeaderValue, Method, StatusCode}, response::In
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::info;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 
 #[derive(Clone)]
 struct AppState {}
@@ -36,10 +39,11 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/ai/health", get(health))
-        .route("/api/ai/offer", post(offer))
+        .route("/api/ai/offer", get(offer_probe).post(offer))
         .route("/api/ai/ice", post(ice))
         .with_state(app_state)
-        .layer(cors);
+        .layer(cors)
+        .layer(TraceLayer::new_for_http());
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7000);
@@ -68,6 +72,10 @@ async fn offer(State(_state): State<Arc<AppState>>, Json(req): Json<OfferRequest
     // Placeholder: echo minimal fake SDP to allow wiring tests. Replace with real SDP answer.
     let fake_answer_sdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n".to_string();
     (StatusCode::OK, Json(AnswerResponse { sdp: fake_answer_sdp }))
+}
+
+async fn offer_probe() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"ok": true})))
 }
 
 #[derive(Debug, Deserialize)]
