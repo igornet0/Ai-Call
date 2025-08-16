@@ -35,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/api/ai/health", get(health))
         .route("/api/ai/offer", post(offer))
         .route("/api/ai/ice", post(ice))
         .with_state(app_state)
