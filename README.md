@@ -65,3 +65,26 @@ In Telegram, open your bot and press Start. You will be prompted to enter a user
 - «Выбрать из контактов» — search your saved contacts, then a room is created and the link is sent to both you and the contact
 
 The web client (`public/call.html`) auto-fills the Room ID from `?room=` if present.
+
+---
+
+## Media Engine (Rust)
+
+A Rust microservice to receive and process WebRTC audio.
+
+Endpoints (HTTP):
+- `GET /health` — healthcheck
+- `POST /api/ai/offer` — accepts `{ sdp: string }`, returns `{ sdp: string }` (placeholder answer for now)
+
+Dev compose starts the service at `media:7000` and Nginx proxies `https://<host>/api/ai/*` to it.
+
+Local dev build and run:
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+# open http://localhost:8080/health (Node app)
+# media engine health: curl http://localhost:8080/api/ai/health (not exposed; use /api/ai/offer)
+```
+
+Next steps:
+- Replace placeholder SDP answer with real WebRTC via `str0m`.
+- Add client-side “AI Call” button to negotiate with `/api/ai/offer`.

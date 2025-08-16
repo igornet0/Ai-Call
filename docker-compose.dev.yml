@@ -17,6 +17,18 @@ services:
       - db
     restart: unless-stopped
 
+  media:
+    build:
+      context: .
+      dockerfile: media-engine/Dockerfile
+    container_name: ai-call-media-dev
+    environment:
+      - HOST=0.0.0.0
+      - PORT=7000
+    expose:
+      - "7000"
+    restart: unless-stopped
+
   db:
     image: postgres:16-alpine
     container_name: ai-call-postgres-dev
@@ -48,6 +60,7 @@ services:
     container_name: ai-call-nginx-dev
     depends_on:
       - app
+      - media
     ports:
       - "8080:80"
     volumes:
